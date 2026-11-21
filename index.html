@@ -173,6 +173,7 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 
 <div id="modalRoot"></div>
 <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+<input type="file" id="galleryInput" accept="image/*" hidden>
 
 <script>
 /* ============ Datos de referencia ============ */
@@ -263,20 +264,41 @@ let db=null, docRef=null, sample=null, sampleImages=false, saveTimer=null, savin
 let gemini=false; // true cuando la app está en Vercel con la clave de Gemini configurada
 const aiReady = () => !!sample || gemini;
 const aiPhoto = () => (!!sample && sampleImages) || gemini;
-async function checkGemini(){
-  if(!/^https?:$/.test(location.protocol)) return;
+// Estado de la IA de Gemini: 'checking' | 'ok' | 'no_key' | 'bad_key' | 'no_server'
+let geminiState='checking';
+async function checkGemini(test){
+  if(!/^https?:$/.test(location.protocol)){ geminiState='no_server'; return geminiState; }
   try{
-    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),6000);
-    const r=await fetch('api/gemini',{signal:ctrl.signal}); clearTimeout(t);
-    if(!r.ok) return;
-    const d=await r.json();
-    if(d && d.configured){ gemini=true; render(); }
-  }catch(e){}
+    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), test?20000:8000);
+    const r=await fetch('/api/gemini'+(test?'?test=1':''),{signal:ctrl.signal,cache:'no-store'}); clearTimeout(t);
+    const type=r.headers.get('content-type')||'';
+    if(!type.includes('json')){ geminiState='no_server'; }
+    else {
+      const d=await r.json();
+      if(!d.configured) geminiState='no_key';
+      else if(test && d.keyOk===false) geminiState = d.error==='rate_limited' ? 'ok' : 'bad_key';
+      else geminiState='ok';
+    }
+  }catch(e){ geminiState='no_server'; }
+  gemini = geminiState==='ok';
+  render();
+  return geminiState;
+}
+function aiStatusText(){
+  if(sample) return {ok:true, t:'IA conectada (Claude)'};
+  switch(geminiState){
+    case 'ok': return {ok:true, t:'IA conectada (Gemini)'};
+    case 'checking': return {ok:false, t:'Comprobando la IA…'};
+    case 'no_key': return {ok:false, t:'Falta la clave: en Vercel añade la variable GEMINI_API_KEY y haz Redeploy.'};
+    case 'bad_key': return {ok:false, t:'La clave de Gemini no funciona. Crea una nueva en Google AI Studio, cámbiala en Vercel y haz Redeploy.'};
+    default: return {ok:false, t:'Esta dirección no tiene el servidor de IA. Abre la app desde tu dirección de Vercel (la que termina en .vercel.app).'};
+  }
 }
 async function geminiCall(task, payload){
   let r;
-  try{ r=await fetch('api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({task},payload))}); }
+  try{ r=await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({task},payload))}); }
   catch(e){ throw {code:'network'}; }
+  if(!(r.headers.get('content-type')||'').includes('json')) throw {code:'no_server'};
   const d=await r.json().catch(()=>({}));
   if(!r.ok) throw {code: d.error==='rate_limited'?'rate_limited':(d.error||'failed')};
   return d;
@@ -386,7 +408,9 @@ function viewNevera(){
   if(S.example && S.items.some(i=>i.example)){
     h+='<div class="notice"><span>Estos alimentos son de ejemplo para que veas cómo funciona.</span><button class="btn small plain" data-act="clear-example">Empezar con mi cocina vacía</button></div>';
   }
-  h+='<div class="row"><button class="btn" data-act="add-photo" style="flex:1">'+icoCam()+' Añadir con foto</button><button class="btn ghost" data-act="add-manual" style="flex:1">+ Añadir a mano</button></div>';
+  h+='<div class="row"><button class="btn" data-act="add-photo" style="flex:1">'+icoCam()+' Hacer foto</button><button class="btn plain" data-act="add-gallery" style="flex:1">Subir foto</button><button class="btn ghost" data-act="add-manual" style="flex:1">+ A mano</button></div>';
+  const ai=aiStatusText();
+  if(!ai.ok && geminiState!=='checking') h+='<p class="small" style="margin:0;color:var(--warn)">'+esc(ai.t)+' <button class="btn link small" data-act="check-ai">Comprobar otra vez</button></p>';
   h+='<div class="seg" role="group" aria-label="Filtrar por sitio">'+
      ['todo','nevera','despensa'].map(p=>'<button data-place="'+p+'" aria-pressed="'+(S.place===p)+'">'+(p==='todo'?'Todo ('+S.items.length+')':p==='nevera'?'Nevera ('+nN+')':'Despensa ('+nD+')')+'</button>').join('')+'</div>';
   if(!items.length){
@@ -413,6 +437,7 @@ function viewRecetas(){
     '<div class="row"><button class="btn" data-act="gen" '+(recipeLoading||!S.items.length?'disabled':'')+' style="flex:1">'+(recipeLoading?'<span class="spinner"></span> Pensando recetas…':(aiReady()?'Sugerir recetas con IA':'Sugerir recetas'))+'</button>'+
     (aiReady()?'<button class="btn ghost" data-act="gen-local" '+(recipeLoading||!S.items.length?'disabled':'')+'>Sin IA</button>':'')+'</div>'+
     (recipeError?'<p class="err">'+esc(recipeError)+'</p>':'')+
+    (!aiReady() && geminiState!=='checking'?'<p class="small" style="margin:0;color:var(--warn)">Sin IA: '+esc(aiStatusText().t)+' <button class="btn link small" data-act="check-ai">Comprobar otra vez</button></p>':'')+
     (!S.items.length?'<p class="small muted">Primero añade algún alimento en «Mi cocina».</p>':'')+'</div>';
   if(S.recipes.length){
     if(S.recipesFor && S.recipesFor!==inventoryKey()) h+='<p class="small muted">Tu cocina ha cambiado desde que se hicieron estas recetas. Pulsa «Sugerir» para actualizarlas.</p>';
@@ -540,17 +565,24 @@ async function downscale(file){
   c.getContext('2d').drawImage(img,0,0,c.width,c.height);
   return await new Promise(res=>c.toBlob(b=>res({blob:b, url:c.toDataURL('image/jpeg',0.7)}),'image/jpeg',0.82));
 }
-function photoStart(){
-  if(!aiPhoto()){
-    openModal('<h2>Añadir con foto</h2><p>Para reconocer los alimentos de una foto hace falta la IA, y en esta versión no está disponible. Funciona en la versión publicada en Vercel con la clave de Gemini configurada, o abriendo la app desde claude.ai.</p><p class="sub">Mientras tanto, puedes añadirlos a mano: te sugiero la fecha y el precio al escribir el nombre.</p><div class="row" style="justify-content:flex-end"><button class="btn plain" id="p-c">Cerrar</button><button class="btn" id="p-m">Añadir a mano</button></div>', ov=>{ ov.querySelector('#p-c').onclick=closeModal; ov.querySelector('#p-m').onclick=()=>{ closeModal(); itemForm(); }; });
-    return;
-  }
-  const inp=document.getElementById('photoInput'); inp.value=''; inp.click();
+// La cámara y la galería se abren siempre; la IA se comprueba después, al analizar la foto.
+function photoStart(fromGallery){
+  const inp=document.getElementById(fromGallery?'galleryInput':'photoInput'); inp.value=''; inp.click();
 }
-document.getElementById('photoInput').addEventListener('change', async e=>{
+function aiUnavailableModal(url, reason){
+  openModal('<h2>No puedo analizar la foto</h2>'+(url?'<img class="photo-preview" alt="Tu foto" src="'+url+'">':'')+
+    '<p>'+esc(reason)+'</p><p class="sub">Mientras tanto, puedes añadir los alimentos a mano: te sugiero la fecha y el precio al escribir el nombre.</p>'+
+    '<div class="row" style="justify-content:flex-end"><button class="btn plain" id="p-c">Cerrar</button><button class="btn" id="p-m">Añadir a mano</button></div>',
+    ov=>{ ov.querySelector('#p-c').onclick=closeModal; ov.querySelector('#p-m').onclick=()=>{ closeModal(); itemForm(); }; });
+}
+async function handlePhoto(e){
   const file=e.target.files && e.target.files[0]; if(!file) return;
   let shot; try{ shot=await downscale(file); }catch(err){ toast('No he podido abrir esa imagen'); return; }
   openModal('<h2>Mirando tu foto…</h2><img class="photo-preview" alt="Tu foto" src="'+shot.url+'"><p class="row"><span class="spinner" style="color:var(--accent)"></span> Reconociendo alimentos</p>');
+  if(!(sample && sampleImages) && !gemini){
+    await checkGemini(true);
+    if(!gemini){ aiUnavailableModal(shot.url, aiStatusText().t); return; }
+  }
   const prompt='Eres el asistente de una app española contra el desperdicio de comida. Mira la foto (una nevera, despensa o compra) y enumera los alimentos que se ven con claridad. '+
     'Devuelve SOLO JSON con esta forma: {"alimentos":[{"nombre":"Yogures naturales","cantidad":"4 uds","sitio":"nevera"|"despensa","dias_hasta_caducar":número entero estimado para un producto en buen estado,"precio_eur":precio orientativo en un supermercado español}]}. '+
     'Nombres cortos en español, en plural si hay varios. No inventes productos que no se vean. Si no ves comida, devuelve {"alimentos":[]}. Hoy es '+todayStr()+'.';
@@ -565,11 +597,14 @@ document.getElementById('photoInput').addEventListener('change', async e=>{
       : err && err.code==='not_granted' ? 'No se ha dado permiso para usar la IA.'
       : err && err.code==='bad_key' ? 'La clave de Gemini no es válida. Revisa la variable GEMINI_API_KEY en Vercel.'
       : err && err.code==='not_configured' ? 'Falta configurar la clave de Gemini en Vercel.'
+      : err && (err.code==='no_server'||err.code==='network') ? 'No conecto con el servidor de IA. Revisa tu conexión y que estés en la dirección de Vercel.'
       : 'No he podido analizar la foto. Prueba con otra más cercana y con buena luz.';
     openModal('<h2>Algo ha fallado</h2><p>'+msg+'</p><div class="row" style="justify-content:flex-end"><button class="btn" id="x">Vale</button></div>', ov=>ov.querySelector('#x').onclick=closeModal);
     if(err && err.code==='not_granted'){ sample=null; render(); }
   }
-});
+}
+document.getElementById('photoInput').addEventListener('change', handlePhoto);
+document.getElementById('galleryInput').addEventListener('change', handlePhoto);
 function reviewDetected(list, url){
   if(!list.length){ openModal('<h2>No he visto alimentos</h2><img class="photo-preview" alt="Tu foto" src="'+url+'"><p>Prueba con una foto más cercana o con mejor luz, o añádelos a mano.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="x">Vale</button></div>', ov=>ov.querySelector('#x').onclick=closeModal); return; }
   const rows=list.slice(0,40).map(a=>{
@@ -688,7 +723,9 @@ document.addEventListener('click', e=>{
   switch(act){
     case 'go-recipes': S.tab='recetas'; render(); break;
     case 'add-manual': itemForm(); break;
-    case 'add-photo': photoStart(); break;
+    case 'add-photo': photoStart(false); break;
+    case 'add-gallery': photoStart(true); break;
+    case 'check-ai': geminiState='checking'; render(); checkGemini(true).then(s=>toast(aiStatusText().t)); break;
     case 'edit': if(item) itemForm(item); break;
     case 'used': if(item) usageDialog(item.name, [{item}]); break;
     case 'waste': if(item) wasteDialog(item); break;

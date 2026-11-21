@@ -45,7 +45,20 @@ async function callGemini(model, key, parts) {
 
 module.exports = async (req, res) => {
   const key = process.env.GEMINI_API_KEY;
-  if (req.method === 'GET') { res.status(200).json({ configured: !!key }); return; }
+  if (req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    const test = req.query ? req.query.test : /[?&]test=1/.test(req.url || '');
+    if (!key || !test) { res.status(200).json({ configured: !!key }); return; }
+    // Prueba rápida de la clave con una petición mínima
+    try {
+      await callGemini(MODELS[0], key, [{ text: 'Responde solo con este JSON: {"ok":true}' }]);
+      res.status(200).json({ configured: true, keyOk: true });
+    } catch (e) {
+      const badKey = e.status === 401 || e.status === 403 || /api key/i.test(e.message || '');
+      res.status(200).json({ configured: true, keyOk: badKey ? false : null, error: badKey ? 'bad_key' : (e.status === 429 ? 'rate_limited' : 'failed'), detail: String(e.message || '').slice(0, 200) });
+    }
+    return;
+  }
   if (req.method !== 'POST') { res.status(405).json({ error: 'method' }); return; }
   if (!key) { res.status(500).json({ error: 'not_configured' }); return; }
 
