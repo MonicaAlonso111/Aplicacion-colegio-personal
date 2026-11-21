@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chef anti-desperdicio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: una sola columna tipo app móvil, cabecera con avisos, pestañas abajo (Nevera · Recetas · Ahorro) */
+:root{
+  --bg:#f3f6f4;
+  --surface:#ffffff;
+  --ink:#16302a;
+  --muted:#5d716b;
+  --line:#dbe4e0;
+  --accent:#1f7a4d;
+  --accent-ink:#ffffff;
+  --accent-soft:#e1f1e8;
+  --warn:#b86e00;
+  --warn-soft:#fdf0d9;
+  --bad:#c0392b;
+  --bad-soft:#fbe4e1;
+  --font-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1714; --surface:#17221e; --ink:#e4efe9; --muted:#93a8a0; --line:#2a3a34;
+    --accent:#4cc287; --accent-ink:#06261a; --accent-soft:#1a3529;
+    --warn:#f0b04a; --warn-soft:#3a2c12; --bad:#f07264; --bad-soft:#3d1d19;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1714; --surface:#17221e; --ink:#e4efe9; --muted:#93a8a0; --line:#2a3a34;
+  --accent:#4cc287; --accent-ink:#06261a; --accent-soft:#1a3529;
+  --warn:#f0b04a; --warn-soft:#3a2c12; --bad:#f07264; --bad-soft:#3d1d19;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding:0 16px 96px}
+header{padding:20px 0 8px;display:flex;flex-direction:column;gap:12px}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{font-family:var(--font-display);font-weight:800;font-size:28px;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance}
+h3{font-size:17px;margin:0;font-weight:700}
+.sub{color:var(--muted);font-size:14px}
+.save-state{font-size:12px;color:var(--muted)}
+.alert{display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--warn-soft);border-left:4px solid var(--warn);border-radius:10px;padding:12px 14px}
+.alert.bad{background:var(--bad-soft);border-color:var(--bad)}
+.alert p{margin:0;font-size:15px}
+.notice{background:var(--accent-soft);border-radius:10px;padding:12px 14px;font-size:14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:600;background:var(--accent);color:var(--accent-ink);display:inline-flex;gap:8px;align-items:center;justify-content:center}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.btn.plain{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:6px 10px;font-size:14px;border-radius:8px}
+.btn.danger{background:var(--bad);color:#fff}
+.btn.link{background:none;color:var(--accent);padding:4px 0;text-decoration:underline}
+main{display:flex;flex-direction:column;gap:16px;padding-top:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{flex:1;border:0;background:none;padding:8px 10px;border-radius:8px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink)}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:6px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px 10px 0;overflow:hidden}
+.item .stripe{align-self:stretch;background:var(--accent);border-radius:0 4px 4px 0}
+.item.soon .stripe{background:var(--warn)}
+.item.urgent .stripe,.item.expired .stripe{background:var(--bad)}
+.item .name{font-weight:600;background:none;border:0;padding:0;text-align:left;cursor:pointer}
+.item .meta{font-size:13px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.pill.soon{background:var(--warn-soft);color:var(--warn)}
+.pill.urgent,.pill.expired{background:var(--bad-soft);color:var(--bad)}
+.pill.ex{background:var(--line);color:var(--muted)}
+.item .actions{display:flex;gap:6px}
+.empty{text-align:center;color:var(--muted);padding:28px 12px;background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.recipe-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.uses{display:flex;flex-wrap:wrap;gap:6px}
+.why{font-size:14px;color:var(--muted);margin:0}
+ol.steps{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:8px;counter-reset:s}
+ol.steps li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+ol.steps li label{display:contents;cursor:pointer}
+ol.steps li input{width:20px;height:20px;margin:2px 0 0 4px;accent-color:var(--accent)}
+ol.steps li.done span{text-decoration:line-through;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:2px}
+.tile.big{grid-column:1/-1;background:var(--accent);color:var(--accent-ink);border:0}
+.tile .num{font-family:var(--font-display);font-weight:800;font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tile.big .num{font-size:44px}
+.tile .lbl{font-size:13px;opacity:.85}
+.bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:8px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bar .b{width:100%;background:var(--accent);border-radius:6px 6px 2px 2px;min-height:2px}
+.bar .v{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar .w{font-size:11px;color:var(--muted)}
+.log{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.log div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.log .neg{color:var(--bad)}
+.log .pos{color:var(--accent);font-weight:600}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .inner{display:flex;max-width:560px;width:100%}
+nav.tabs button{flex:1;border:0;background:none;padding:10px 4px 12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+.badge{background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;margin-left:2px}
+/* diálogos */
+.overlay{position:fixed;inset:0;background:rgba(10,20,16,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:20px 16px 24px;display:flex;flex-direction:column;gap:14px}
+@media (min-width:600px){.overlay{align-items:center}.sheet{border-radius:18px}}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:14px;font-weight:600}
+.field input,.field select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;width:100%}
+.field .hint{font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.check-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.check-row .grow{flex:1;min-width:0}
+.check-row select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px}
+.spinner{width:18px;height:18px;border:3px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spinner{animation-duration:3s}}
+.err{color:var(--bad);font-size:14px;margin:0}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:30;max-width:90%}
+.photo-preview{max-width:100%;max-height:200px;border-radius:10px;object-fit:cover}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.how{font-size:14px;color:var(--muted)}
+.how summary{cursor:pointer;font-weight:600;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>Chef anti-desperdicio</h1>
+      <span class="save-state" id="saveState">Guardado en este navegador</span>
+    </div>
+    <div id="alertArea"></div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<nav class="tabs" aria-label="Secciones">
+  <div class="inner">
+    <button data-tab="nevera" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M5 10h14M9 6v1M9 13v3"/></svg>
+      <span>Mi cocina <span id="tabBadge"></span></span>
+    </button>
+    <button data-tab="recetas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 13.9A4 4 0 0 1 7.5 6a5 5 0 0 1 9 0A4 4 0 0 1 18 13.9V20H6z"/><path d="M6 17h12"/></svg>
+      <span>Recetas</span>
+    </button>
+    <button data-tab="ahorro">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>Ahorro</span>
+    </button>
+  </div>
+</nav>
+
+<div id="modalRoot"></div>
+<input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+
+<script>
+/* ============ Datos de referencia ============ */
+// [palabra clave, días que suele durar, precio orientativo €, sitio]
+const REF = [
+  ['tomate frito',365,1.0,'despensa'],['leche',7,1.0,'nevera'],['yogur',14,2.0,'nevera'],['queso',14,3.0,'nevera'],
+  ['huevo',21,2.5,'nevera'],['pollo',2,5.0,'nevera'],['carne picada',2,4.0,'nevera'],['picada',2,4.0,'nevera'],['carne',2,5.0,'nevera'],
+  ['pescado',2,6.0,'nevera'],['merluza',2,6.0,'nevera'],['salmon',2,7.0,'nevera'],['jamon',7,3.0,'nevera'],
+  ['lechuga',5,1.0,'nevera'],['espinaca',4,1.5,'nevera'],['tomate',7,1.5,'nevera'],['pepino',7,0.8,'nevera'],
+  ['pimiento',7,1.2,'nevera'],['calabacin',7,1.0,'nevera'],['zanahoria',21,0.9,'nevera'],['champinon',5,1.8,'nevera'],
+  ['brocoli',5,1.5,'nevera'],['berenjena',7,1.2,'nevera'],['fresa',4,2.5,'nevera'],['mantequilla',30,2.0,'nevera'],['nata',7,1.2,'nevera'],
+  ['aguacate',4,1.2,'despensa'],['platano',5,1.5,'despensa'],['manzana',21,2.0,'despensa'],['naranja',14,2.0,'despensa'],
+  ['limon',21,0.5,'despensa'],['pan',3,1.2,'despensa'],['patata',30,1.5,'despensa'],['cebolla',30,1.0,'despensa'],
+  ['ajo',60,0.5,'despensa'],['arroz',365,1.2,'despensa'],['pasta',365,1.0,'despensa'],['macarron',365,1.0,'despensa'],
+  ['espagueti',365,1.0,'despensa'],['lenteja',365,1.5,'despensa'],['garbanzo',365,1.2,'despensa'],['alubia',365,1.5,'despensa'],
+  ['atun',730,2.5,'despensa'],['harina',180,0.8,'despensa'],['tortilla de trigo',10,1.8,'despensa'],['calabaza',30,2.0,'despensa']
+].sort((a,b)=>b[0].length-a[0].length);
+
+const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+function refFor(name){ const n = norm(name); return REF.find(r => n.includes(r[0])) || null; }
+
+// Recetario local: funciona sin IA. Cada hueco necesita un ingrediente de la lista.
+const BOOK = [
+  {t:'Tortilla de patatas', min:25, veg:true, slots:[['huevo'],['patata']], extras:['aceite de oliva','sal','cebolla (opcional)'],
+   steps:['Pela y corta {1} en láminas finas.','Fríelas a fuego medio en aceite unos 15 minutos, hasta que estén tiernas. Escúrrelas.','Bate 3 de {0} con una pizca de sal y mézclalos con las patatas.','Cuaja la mezcla en una sartén pequeña, 3 minutos por cada lado. Usa un plato para darle la vuelta.']},
+  {t:'Revuelto de verduras', min:12, veg:true, slots:[['huevo'],['calabacin','pimiento','espinaca','champinon','tomate','brocoli','berenjena','cebolla']], extras:['aceite','sal'],
+   steps:['Corta {1} en trozos pequeños.','Saltéalo en una sartén con un chorrito de aceite 5–6 minutos.','Añade 2 de {0} batidos con sal y remueve a fuego bajo hasta que cuajen.']},
+  {t:'Pasta con tomate', min:20, veg:true, slots:[['pasta','macarron','espagueti'],['tomate frito','tomate']], extras:['aceite','sal','ajo u orégano (opcional)'],
+   steps:['Cuece unos 100 g de {0} en agua con sal el tiempo que indique el paquete.','Mientras, calienta {1} en una sartén con un poco de aceite (si es tomate natural, rállalo y cocínalo 8 minutos).','Escurre la pasta, mézclala con la salsa y sirve.']},
+  {t:'Arroz salteado', min:25, veg:true, slots:[['arroz'],['zanahoria','pimiento','calabacin','champinon','cebolla','brocoli','huevo']], extras:['aceite','sal','salsa de soja (opcional)'],
+   steps:['Cuece 80 g de {0} en el doble de agua con sal, 15–18 minutos.','Corta {1} en dados pequeños y saltéalo con aceite a fuego fuerte.','Añade el arroz, saltea 3 minutos más y sazona.']},
+  {t:'Ensalada completa', min:10, veg:true, slots:[['lechuga','espinaca'],['tomate','pepino','zanahoria','aguacate','atun','queso']], extras:['aceite','vinagre','sal'],
+   steps:['Lava y corta {0}.','Añade {1} en trozos.','Aliña con aceite, vinagre y sal justo antes de comer.']},
+  {t:'Crema de verduras', min:30, veg:true, slots:[['calabacin','calabaza','zanahoria','brocoli','espinaca','puerro'],['patata','cebolla']], extras:['aceite','sal','agua'],
+   steps:['Trocea {0} y {1}.','Rehógalos 5 minutos en una olla con aceite.','Cubre con agua, añade sal y cuece 20 minutos.','Tritura hasta que quede fino. Se puede congelar.']},
+  {t:'Pollo al horno con patatas', min:50, veg:false, slots:[['pollo'],['patata','cebolla','pimiento','zanahoria']], extras:['aceite','sal','pimienta','hierbas secas'],
+   steps:['Precalienta el horno a 200 °C.','Corta {1} en trozos y colócalo en una bandeja con aceite y sal.','Pon encima {0} salpimentado y con hierbas.','Hornea 40–45 minutos, dando la vuelta a mitad.']},
+  {t:'Tostadas para aprovechar', min:5, veg:true, slots:[['pan'],['tomate','aguacate','queso','jamon']], extras:['aceite','sal'],
+   steps:['Tuesta {0} (si está un poco duro, mejor: queda crujiente).','Pon encima {1} en láminas o machacado.','Termina con un chorrito de aceite y sal.']},
+  {t:'Batido de fruta', min:5, veg:true, slots:[['platano','fresa','manzana'],['leche','yogur']], extras:['miel (opcional)'],
+   steps:['Pela y trocea {0}. La fruta muy madura es perfecta para esto.','Tritúrala con {1} hasta que quede suave.','Sirve frío.']},
+  {t:'Lentejas guisadas', min:40, veg:true, slots:[['lenteja'],['zanahoria','patata','cebolla','pimiento']], extras:['aceite','sal','pimentón','agua'],
+   steps:['Pica {1} y rehógalo en una olla con aceite.','Añade una cucharadita de pimentón y 150 g de {0}.','Cubre con agua y cuece 30–35 minutos a fuego medio (10 si son de bote).','Prueba de sal y sirve.']},
+  {t:'Quesadillas', min:10, veg:true, slots:[['tortilla de trigo'],['queso']], extras:[],
+   steps:['Pon {1} rallado o en lonchas sobre media {0}.','Dóblala por la mitad.','Dórala en una sartén sin aceite 2 minutos por cada lado.']},
+  {t:'Torrijas exprés', min:15, veg:true, slots:[['pan'],['huevo'],['leche']], extras:['azúcar','canela','aceite'],
+   steps:['Corta {0} en rebanadas gruesas (el pan del día anterior va mejor).','Empápalas en {2} con azúcar y luego pásalas por {1} batido.','Fríelas en poco aceite hasta que estén doradas y espolvorea canela.']},
+  {t:'Macarrones con queso', min:20, veg:true, slots:[['pasta','macarron'],['queso'],['leche','nata']], extras:['mantequilla o aceite','sal','pimienta'],
+   steps:['Cuece 100 g de {0} en agua con sal.','En un cazo, calienta un vaso pequeño de {2} y funde dentro {1} rallado.','Mezcla la salsa con la pasta escurrida y pimienta.']},
+  {t:'Garbanzos salteados', min:15, veg:true, slots:[['garbanzo'],['espinaca','tomate','pimiento','cebolla']], extras:['aceite','ajo','comino o pimentón','sal'],
+   steps:['Sofríe un ajo picado con aceite.','Añade {1} troceado y cocina 4 minutos.','Incorpora {0} escurridos, las especias y saltea 5 minutos más.']},
+  {t:'Pescado con verduras', min:25, veg:false, slots:[['pescado','merluza','salmon'],['calabacin','pimiento','patata','brocoli','tomate','zanahoria','berenjena']], extras:['aceite','sal','limón (opcional)'],
+   steps:['Corta {1} en trozos finos y saltéalo o hornéalo 12 minutos.','Sala {0} y hazlo a la plancha 3–4 minutos por lado.','Sirve el pescado sobre las verduras.']},
+  {t:'Hamburguesas caseras', min:25, veg:false, slots:[['carne picada','picada','carne'],['cebolla','huevo','pan','tomate']], extras:['sal','pimienta','aceite'],
+   steps:['Mezcla {0} con sal, pimienta y {1} (picado o desmigado).','Forma 2 hamburguesas y aplánalas.','Hazlas en la sartén 4 minutos por lado. Las que sobren se pueden congelar crudas.']},
+  {t:'Yogur con fruta', min:3, veg:true, slots:[['yogur'],['platano','fresa','manzana','naranja']], extras:['avena o frutos secos (opcional)'],
+   steps:['Trocea {1}.','Sírvelo sobre {0}.','Añade avena o frutos secos si tienes.']},
+  {t:'Ensalada de pasta', min:20, veg:false, slots:[['pasta','macarron'],['atun','tomate','pepino','queso','zanahoria']], extras:['aceite','sal','vinagre'],
+   steps:['Cuece 100 g de {0}, escúrrela y enfríala con agua.','Mezcla con {1} troceado.','Aliña. Aguanta 2 días en la nevera en un táper.']}
+];
+
+/* ============ Estado ============ */
+const todayStr = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const addDays = (n) => { const d=new Date(); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+function daysLeft(exp){ if(!exp) return 999; const [y,m,d]=exp.split('-').map(Number); const t=new Date(); const a=new Date(t.getFullYear(),t.getMonth(),t.getDate()); return Math.round((new Date(y,m-1,d)-a)/864e5); }
+const uid = () => Math.random().toString(36).slice(2,10);
+const eur = n => (Math.round(n*100)/100).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+
+function sampleItems(){
+  const mk=(name,qty,place,d,price)=>({id:uid(),name,qty,place,expiry:addDays(d),price,example:true});
+  return [mk('Espinacas','1 bolsa','nevera',1,1.5),mk('Pechuga de pollo','2 filetes','nevera',2,4.5),mk('Huevos','6 uds','nevera',12,2.5),
+          mk('Tomates','4 uds','nevera',3,1.5),mk('Yogures naturales','3 uds','nevera',6,1.2),mk('Plátanos','3 uds','despensa',2,1.2),
+          mk('Patatas','1 kg','despensa',20,1.5),mk('Arroz','1 paquete','despensa',300,1.2),mk('Pan de barra','media','despensa',1,0.6)];
+}
+const S = {
+  items: sampleItems(),
+  stats: {saved:0, wasted:0, itemsSaved:0, itemsWasted:0, cooked:0, log:[]},
+  recipes: [],
+  recipesFor: '',
+  filters: {quick:false, veg:false},
+  tab: 'nevera',
+  place: 'todo',
+  example: true
+};
+
+/* ============ Guardado ============ */
+let db=null, docRef=null, sample=null, sampleImages=false, saveTimer=null, saving=false, pendingSave=false;
+const LS_KEY='chef-antidesperdicio-v1';
+function snapshot(){ return {items:S.items, stats:S.stats, recipes:S.recipes, recipesFor:S.recipesFor, example:S.example, filters:S.filters, v:1}; }
+function applyData(d){
+  if(!d || !Array.isArray(d.items)) return false;
+  S.items=d.items; S.stats=Object.assign({saved:0,wasted:0,itemsSaved:0,itemsWasted:0,cooked:0,log:[]}, d.stats||{});
+  S.recipes=Array.isArray(d.recipes)?d.recipes:[]; S.recipesFor=d.recipesFor||''; S.example=!!d.example;
+  if(d.filters) S.filters=Object.assign(S.filters,d.filters);
+  return true;
+}
+function setSaveState(t){ document.getElementById('saveState').textContent=t; }
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(snapshot())); }catch(e){}
+  if(!docRef){ return; }
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(flush, 700);
+}
+async function flush(){
+  if(saving){ pendingSave=true; return; }
+  saving=true; setSaveState('Guardando…');
+  try{ await docRef.set(snapshot()); setSaveState('Guardado en tu cuenta'); }
+  catch(e){ setSaveState(e && e.code==='quota_exceeded' ? 'Sin espacio para guardar' : 'Guardado solo en este navegador'); if(e && (e.code==='invalid_argument'||e.code==='revoked')) docRef=null; }
+  saving=false;
+  if(pendingSave){ pendingSave=false; flush(); }
+}
+function loadLocal(){ try{ const raw=localStorage.getItem(LS_KEY); if(raw) applyData(JSON.parse(raw)); }catch(e){} }
+
+async function initCapabilities(){
+  if(!window.claude || !window.claude.use){ return; }
+  claude.use('sample').then(async s=>{
+    sample=s;
+    if(s){ try{ const l=await s.limits(); sampleImages=!!(l && l.images); }catch(e){ sampleImages=false; } }
+    render();
+  });
+  try{
+    const [d,u] = await Promise.all([claude.use('db'), claude.use('user')]);
+    if(!d || !u) return;
+    const id = await u.id();
+    if(!id) return;
+    db=d; const ref = db.collection('data/users/'+id).doc('cocina');
+    setSaveState('Cargando…');
+    const timeout = new Promise(res=>setTimeout(()=>res('timeout'),10000));
+    const snap = await Promise.race([ref.get(), timeout]);
+    if(snap==='timeout'){ setSaveState('Guardado solo en este navegador'); return; }
+    docRef = ref;
+    if(snap.exists && applyData(snap.data())){ setSaveState('Guardado en tu cuenta'); render(); }
+    else { setSaveState('Guardado en tu cuenta'); flush(); }
+  }catch(e){ setSaveState('Guardado solo en este navegador'); }
+}
+
+/* ============ Utilidades UI ============ */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function status(item){ const d=daysLeft(item.expiry); if(d<0) return 'expired'; if(d<=2) return 'urgent'; if(d<=5) return 'soon'; return 'ok'; }
+function statusLabel(item){
+  const d=daysLeft(item.expiry);
+  if(!item.expiry) return 'Sin fecha';
+  if(d<0) return d===-1?'Caducó ayer':'Caducó hace '+(-d)+' días';
+  if(d===0) return 'Caduca hoy';
+  if(d===1) return 'Caduca mañana';
+  if(d>60) return 'Dura meses';
+  return 'Caduca en '+d+' días';
+}
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function openModal(html, onMount){
+  const root=document.getElementById('modalRoot');
+  root.innerHTML='<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true">'+html+'</div></div>';
+  const ov=document.getElementById('ov');
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeModal(); });
+  document.addEventListener('keydown', escClose);
+  const first=ov.querySelector('input,select,button'); if(first) first.focus();
+  if(onMount) onMount(ov);
+}
+function escClose(e){ if(e.key==='Escape') closeModal(); }
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; document.removeEventListener('keydown', escClose); }
+const sortedItems = () => [...S.items].sort((a,b)=>daysLeft(a.expiry)-daysLeft(b.expiry));
+
+/* ============ Render ============ */
+function render(){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.tab===S.tab?'page':'false'));
+  const urgent=S.items.filter(i=>['urgent','expired'].includes(status(i)));
+  document.getElementById('tabBadge').innerHTML = urgent.length?'<span class="badge">'+urgent.length+'</span>':'';
+  renderAlert(urgent);
+  const v=document.getElementById('view');
+  if(S.tab==='nevera') v.innerHTML=viewNevera();
+  else if(S.tab==='recetas') v.innerHTML=viewRecetas();
+  else v.innerHTML=viewAhorro();
+}
+function renderAlert(urgent){
+  const a=document.getElementById('alertArea');
+  const exp=urgent.filter(i=>status(i)==='expired');
+  const soon=urgent.filter(i=>status(i)==='urgent');
+  if(!urgent.length){ a.innerHTML=''; return; }
+  let txt='';
+  if(soon.length) txt += '<strong>'+soon.length+(soon.length===1?' alimento caduca':' alimentos caducan')+' en 2 días o menos:</strong> '+esc(soon.slice(0,3).map(i=>i.name).join(', '))+(soon.length>3?'…':'')+'. ';
+  if(exp.length) txt += exp.length+(exp.length===1?' ya ha caducado.':' ya han caducado.');
+  a.innerHTML='<div class="alert'+(soon.length?'':' bad')+'" role="status"><p>'+txt+'</p>'+(S.tab!=='recetas'&&soon.length?'<button class="btn small" data-act="go-recipes">Aprovechar</button>':'')+'</div>';
+}
+
+function viewNevera(){
+  const items=sortedItems().filter(i=>S.place==='todo'||i.place===S.place);
+  const nN=S.items.filter(i=>i.place==='nevera').length, nD=S.items.filter(i=>i.place==='despensa').length;
+  let h='';
+  if(S.example && S.items.some(i=>i.example)){
+    h+='<div class="notice"><span>Estos alimentos son de ejemplo para que veas cómo funciona.</span><button class="btn small plain" data-act="clear-example">Empezar con mi cocina vacía</button></div>';
+  }
+  h+='<div class="row"><button class="btn" data-act="add-photo" style="flex:1">'+icoCam()+' Añadir con foto</button><button class="btn ghost" data-act="add-manual" style="flex:1">+ Añadir a mano</button></div>';
+  h+='<div class="seg" role="group" aria-label="Filtrar por sitio">'+
+     ['todo','nevera','despensa'].map(p=>'<button data-place="'+p+'" aria-pressed="'+(S.place===p)+'">'+(p==='todo'?'Todo ('+S.items.length+')':p==='nevera'?'Nevera ('+nN+')':'Despensa ('+nD+')')+'</button>').join('')+'</div>';
+  if(!items.length){
+    h+='<div class="empty"><h3>No hay nada aquí todavía</h3><p class="small">Haz una foto de tu nevera o despensa, o añade los alimentos a mano.</p></div>';
+  } else {
+    h+='<div class="list">'+items.map(itemRow).join('')+'</div>';
+    h+='<p class="small muted">Ordenados por fecha de caducidad: lo de arriba es lo primero que deberías usar. Toca un nombre para editarlo.</p>';
+  }
+  return h;
+}
+function itemRow(i){
+  const st=status(i);
+  return '<div class="item '+st+'"><span class="stripe"></span><div><button class="name" data-act="edit" data-id="'+i.id+'">'+esc(i.name)+'</button>'+
+    '<div class="meta"><span class="pill '+st+'">'+statusLabel(i)+'</span><span>'+esc(i.qty||'')+'</span><span>'+(i.place==='nevera'?'Nevera':'Despensa')+'</span>'+(i.price?'<span>'+eur(i.price)+'</span>':'')+(i.example?'<span class="pill ex">Ejemplo</span>':'')+'</div></div>'+
+    '<div class="actions"><button class="btn small plain" data-act="used" data-id="'+i.id+'" aria-label="Lo he usado: '+esc(i.name)+'">Usado</button><button class="btn small plain" data-act="waste" data-id="'+i.id+'" aria-label="Lo he tirado: '+esc(i.name)+'" style="color:var(--bad)">Tirado</button></div></div>';
+}
+function icoCam(){ return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'; }
+
+let recipeLoading=false, recipeError='';
+function inventoryKey(){ return S.items.map(i=>i.id+':'+i.expiry+':'+(i.price||0)).sort().join('|')+JSON.stringify(S.filters); }
+function viewRecetas(){
+  let h='<div class="card"><h2>¿Qué cocino hoy?</h2><p class="sub" style="margin:0">Las recetas usan primero lo que está a punto de caducar.</p>'+
+    '<div class="chips"><button class="chip" data-filter="quick" aria-pressed="'+S.filters.quick+'">Rápidas (≤ 20 min)</button><button class="chip" data-filter="veg" aria-pressed="'+S.filters.veg+'">Vegetarianas</button></div>'+
+    '<div class="row"><button class="btn" data-act="gen" '+(recipeLoading||!S.items.length?'disabled':'')+' style="flex:1">'+(recipeLoading?'<span class="spinner"></span> Pensando recetas…':(sample?'Sugerir recetas con IA':'Sugerir recetas'))+'</button>'+
+    (sample?'<button class="btn ghost" data-act="gen-local" '+(recipeLoading||!S.items.length?'disabled':'')+'>Sin IA</button>':'')+'</div>'+
+    (recipeError?'<p class="err">'+esc(recipeError)+'</p>':'')+
+    (!S.items.length?'<p class="small muted">Primero añade algún alimento en «Mi cocina».</p>':'')+'</div>';
+  if(S.recipes.length){
+    if(S.recipesFor && S.recipesFor!==inventoryKey()) h+='<p class="small muted">Tu cocina ha cambiado desde que se hicieron estas recetas. Pulsa «Sugerir» para actualizarlas.</p>';
+    h+=S.recipes.map(recipeCard).join('');
+  } else if(!recipeLoading && S.items.length){
+    h+='<div class="empty"><p>Pulsa el botón y te propongo recetas con lo que tienes.</p></div>';
+  }
+  return h;
+}
+function recipeCard(r, idx){
+  const uses=r.uses.map(u=>{ const it=S.items.find(i=>i.id===u.itemId); const st=it?status(it):'ok'; return '<span class="pill '+(st==='ok'?'':st)+'">'+esc(u.name)+(u.amount?' · '+esc(u.amount):'')+'</span>'; }).join('');
+  return '<article class="card"><div class="recipe-head"><div><h3>'+esc(r.title)+'</h3><div class="tags small muted">'+r.minutes+' min · '+(r.servings||1)+(r.servings>1?' raciones':' ración')+(r.source==='ia'?' · IA':' · Recetario')+'</div></div>'+
+    '<div class="row" style="flex-direction:column;align-items:stretch;gap:6px"><button class="btn small" data-act="open-recipe" data-idx="'+idx+'">Ver receta</button>'+videoLink(r,true)+'</div></div>'+
+    (r.why?'<p class="why">'+esc(r.why)+'</p>':'')+
+    '<div><div class="small muted" style="margin-bottom:4px">De tu cocina:</div><div class="uses">'+uses+'</div></div>'+
+    (r.extras&&r.extras.length?'<div class="small muted">Básicos: '+esc(r.extras.join(', '))+'</div>':'')+'</article>';
+}
+
+function videoUrl(r){ return 'https://www.youtube.com/results?search_query='+encodeURIComponent('receta '+r.title+' fácil'); }
+function videoLink(r, small){
+  return '<a class="btn '+(small?'small ':'')+'plain" href="'+videoUrl(r)+'" target="_blank" rel="noopener noreferrer" style="text-decoration:none">'+
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg> Ver vídeo</a>';
+}
+function viewAhorro(){
+  const st=S.stats, total=st.saved+st.wasted, pct= total? Math.round(st.saved/total*100):null;
+  let h='<div class="tiles">'+
+    '<div class="tile big"><span class="lbl">Dinero ahorrado aprovechando comida</span><span class="num">'+eur(st.saved)+'</span><span class="lbl">'+st.itemsSaved+' alimentos aprovechados · '+st.cooked+' recetas cocinadas</span></div>'+
+    '<div class="tile"><span class="lbl">Comida tirada</span><span class="num" style="color:var(--bad)">'+eur(st.wasted)+'</span><span class="lbl">'+st.itemsWasted+' alimentos</span></div>'+
+    '<div class="tile"><span class="lbl">Aprovechamiento</span><span class="num">'+(pct===null?'—':pct+' %')+'</span><span class="lbl">de lo que has gastado o tirado</span></div>'+
+    '</div>';
+  // barras semanales
+  const weeks=[]; const now=new Date(); const monday=new Date(now.getFullYear(),now.getMonth(),now.getDate()-((now.getDay()+6)%7));
+  for(let w=5;w>=0;w--){ const s=new Date(monday); s.setDate(s.getDate()-7*w); const e=new Date(s); e.setDate(e.getDate()+7); weeks.push({s,e,v:0}); }
+  st.log.forEach(l=>{ if(l.type!=='saved') return; const [y,m,d]=l.date.split('-').map(Number); const dt=new Date(y,m-1,d); weeks.forEach(w=>{ if(dt>=w.s&&dt<w.e) w.v+=l.value; }); });
+  const max=Math.max(...weeks.map(w=>w.v),1);
+  h+='<div class="card"><h2>Ahorro por semana</h2><div class="bars" role="img" aria-label="Ahorro de las últimas 6 semanas">'+weeks.map((w,i)=>'<div class="bar"><span class="v">'+(w.v?Math.round(w.v*10)/10+'€':'')+'</span><div class="b" style="height:'+(w.v/max*80)+'%;'+(i===5?'':'opacity:.55')+'"></div><span class="w">'+(i===5?'Esta':w.s.getDate()+'/'+(w.s.getMonth()+1))+'</span></div>').join('')+'</div></div>';
+  h+='<div class="card"><h2>Últimos movimientos</h2>';
+  if(!st.log.length) h+='<p class="small muted" style="margin:0">Aún no hay nada. Cuando cocines una receta o marques un alimento como «Usado», aparecerá aquí.</p>';
+  else h+='<div class="log">'+st.log.slice(0,12).map(l=>'<div><span>'+esc(l.title)+' <span class="muted small">'+l.date.split('-').reverse().slice(0,2).join('/')+'</span></span><span class="'+(l.type==='saved'?'pos':'neg')+'">'+(l.type==='saved'?'+':'−')+eur(l.value)+'</span></div>').join('')+'</div>';
+  h+='</div>';
+  h+='<details class="how card"><summary>¿Cómo se calcula?</summary><p>Cada alimento tiene un precio (el que pones tú, o uno orientativo). Cuando cocinas una receta o marcas algo como «Usado», eliges cuánto has gastado: entero (100 %), la mitad (50 %) o un poco (25 %). Ese porcentaje del precio se suma a «Dinero ahorrado», porque es comida que has aprovechado en lugar de dejar que se estropee. Si gastas solo una parte, el resto se queda en tu cocina con su precio rebajado.</p><p>Cuando marcas algo como «Tirado», su precio se suma a «Comida tirada». El aprovechamiento es ahorrado ÷ (ahorrado + tirado).</p>'+
+    '<button class="btn small plain" data-act="reset-stats">Poner contadores a cero</button></details>';
+  return h;
+}
+
+/* ============ Formularios ============ */
+function itemForm(item){
+  const isNew=!item; item=item||{name:'',qty:'',place:'nevera',expiry:'',price:''};
+  openModal('<h2>'+(isNew?'Añadir alimento':'Editar alimento')+'</h2>'+
+    '<form id="itemForm" class="list" style="gap:12px">'+
+    '<div class="field"><label for="f-name">Alimento</label><input id="f-name" required placeholder="Ej.: yogures naturales" value="'+esc(item.name)+'" autocomplete="off"><span class="hint" id="f-hint">Al escribirlo te sugiero fecha y precio.</span></div>'+
+    '<div class="grid2"><div class="field"><label for="f-qty">Cantidad</label><input id="f-qty" placeholder="Ej.: 4 uds, 500 g" value="'+esc(item.qty)+'"></div>'+
+    '<div class="field"><label for="f-place">Dónde está</label><select id="f-place"><option value="nevera"'+(item.place==='nevera'?' selected':'')+'>Nevera</option><option value="despensa"'+(item.place==='despensa'?' selected':'')+'>Despensa</option></select></div></div>'+
+    '<div class="grid2"><div class="field"><label for="f-exp">Caduca el</label><input id="f-exp" type="date" value="'+esc(item.expiry)+'"></div>'+
+    '<div class="field"><label for="f-price">Precio (€)</label><input id="f-price" type="number" min="0" step="0.05" inputmode="decimal" value="'+esc(item.price)+'"></div></div>'+
+    '<div class="row" style="justify-content:space-between">'+(isNew?'':'<button type="button" class="btn small danger" id="f-del">Borrar</button>')+'<span style="flex:1"></span><button type="button" class="btn plain" id="f-cancel">Cancelar</button><button class="btn" type="submit">'+(isNew?'Añadir':'Guardar')+'</button></div>'+
+    '</form>', ov=>{
+      const name=ov.querySelector('#f-name'), exp=ov.querySelector('#f-exp'), price=ov.querySelector('#f-price'), place=ov.querySelector('#f-place'), hint=ov.querySelector('#f-hint');
+      let touchedExp=!isNew, touchedPrice=!isNew, touchedPlace=!isNew;
+      exp.addEventListener('input',()=>touchedExp=true); price.addEventListener('input',()=>touchedPrice=true); place.addEventListener('change',()=>touchedPlace=true);
+      name.addEventListener('input',()=>{
+        const r=refFor(name.value); if(!r){ hint.textContent='Al escribirlo te sugiero fecha y precio.'; return; }
+        if(!touchedExp) exp.value=addDays(r[1]); if(!touchedPrice) price.value=r[2].toFixed(2); if(!touchedPlace) place.value=r[3];
+        hint.textContent='Sugerencia: suele durar '+(r[1]>60?'meses':r[1]+' días')+'. Cámbialo si tu envase dice otra cosa.';
+      });
+      ov.querySelector('#f-cancel').onclick=closeModal;
+      const del=ov.querySelector('#f-del'); if(del) del.onclick=()=>{ S.items=S.items.filter(i=>i.id!==item.id); closeModal(); save(); render(); toast('Borrado'); };
+      ov.querySelector('#itemForm').addEventListener('submit',e=>{
+        e.preventDefault();
+        const data={name:name.value.trim(), qty:ov.querySelector('#f-qty').value.trim(), place:place.value, expiry:exp.value, price:parseFloat(price.value)||0};
+        if(!data.name) return;
+        if(isNew){ S.items.push(Object.assign({id:uid()},data)); toast('Añadido: '+data.name); }
+        else { Object.assign(item,data); delete item.example; toast('Guardado'); }
+        S.example = S.items.some(i=>i.example);
+        closeModal(); save(); render();
+      });
+    });
+}
+
+const FRACTIONS=[[1,'Entero'],[0.5,'La mitad'],[0.25,'Un poco']];
+function usageDialog(title, entries, onDone){
+  // entries: [{item, amount}]
+  openModal('<h2>'+esc(title)+'</h2><p class="sub" style="margin:0">¿Cuánto has gastado de cada cosa? Lo que gastes se suma a tu ahorro.</p>'+
+    '<div>'+entries.map((e,k)=>'<div class="check-row"><input type="checkbox" id="u-c'+k+'" checked><label class="grow" for="u-c'+k+'"><strong>'+esc(e.item.name)+'</strong><div class="small muted">'+(e.item.price?eur(e.item.price):'sin precio')+(e.amount?' · receta: '+esc(e.amount):'')+'</div></label>'+
+      '<select id="u-f'+k+'" aria-label="Cantidad usada de '+esc(e.item.name)+'">'+FRACTIONS.map(f=>'<option value="'+f[0]+'">'+f[1]+'</option>').join('')+'</select></div>').join('')+'</div>'+
+    '<p class="small" id="u-total"></p>'+
+    '<div class="row" style="justify-content:flex-end"><button class="btn plain" id="u-cancel">Cancelar</button><button class="btn" id="u-ok">Confirmar</button></div>', ov=>{
+      const calc=()=>{ let t=0; entries.forEach((e,k)=>{ if(ov.querySelector('#u-c'+k).checked) t+=(e.item.price||0)*parseFloat(ov.querySelector('#u-f'+k).value); }); ov.querySelector('#u-total').innerHTML='Vas a sumar <strong>'+eur(t)+'</strong> a tu ahorro.'; return t; };
+      ov.querySelectorAll('input,select').forEach(el=>el.addEventListener('change',calc)); calc();
+      ov.querySelector('#u-cancel').onclick=closeModal;
+      ov.querySelector('#u-ok').onclick=()=>{
+        let total=0, n=0;
+        entries.forEach((e,k)=>{
+          if(!ov.querySelector('#u-c'+k).checked) return;
+          const f=parseFloat(ov.querySelector('#u-f'+k).value), it=e.item, v=(it.price||0)*f;
+          total+=v; n++;
+          if(f>=1) S.items=S.items.filter(i=>i.id!==it.id);
+          else { it.price=Math.round((it.price||0)*(1-f)*100)/100; if(!/\(queda parte\)/.test(it.qty||'')) it.qty=((it.qty||'')+' (queda parte)').trim(); }
+        });
+        S.stats.saved=Math.round((S.stats.saved+total)*100)/100; S.stats.itemsSaved+=n;
+        onDone && onDone(total, n);
+        if(n) logEntry('saved', title, total);
+        closeModal(); save(); render(); toast(n?'¡Bien! Has ahorrado '+eur(total):'Sin cambios');
+      };
+    });
+}
+function logEntry(type,title,value){ S.stats.log.unshift({type,title,value:Math.round(value*100)/100,date:todayStr()}); S.stats.log=S.stats.log.slice(0,200); }
+
+function wasteDialog(item){
+  openModal('<h2>¿Has tirado «'+esc(item.name)+'»?</h2><p class="sub" style="margin:0">Se quitará de tu cocina y '+(item.price?eur(item.price):'su valor')+' se sumará a «Comida tirada». Te servirá para ver qué compras de más.</p>'+
+    '<div class="row" style="justify-content:flex-end"><button class="btn plain" id="w-cancel">Cancelar</button><button class="btn danger" id="w-ok">Sí, lo he tirado</button></div>', ov=>{
+      ov.querySelector('#w-cancel').onclick=closeModal;
+      ov.querySelector('#w-ok').onclick=()=>{
+        S.items=S.items.filter(i=>i.id!==item.id); S.stats.wasted=Math.round((S.stats.wasted+(item.price||0))*100)/100; S.stats.itemsWasted++;
+        logEntry('wasted', item.name+' (tirado)', item.price||0); closeModal(); save(); render(); toast('Anotado');
+      };
+    });
+}
+
+/* ============ Foto con IA ============ */
+async function downscale(file){
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); });
+  const max=1280, sc=Math.min(1, max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  return await new Promise(res=>c.toBlob(b=>res({blob:b, url:c.toDataURL('image/jpeg',0.7)}),'image/jpeg',0.82));
+}
+function photoStart(){
+  if(!sample || !sampleImages){
+    openModal('<h2>Añadir con foto</h2><p>Para reconocer los alimentos de una foto hace falta la IA, y en esta vista no está disponible. Abre la app desde claude.ai con tu cuenta para usarla.</p><p class="sub">Mientras tanto, puedes añadirlos a mano: te sugiero la fecha y el precio al escribir el nombre.</p><div class="row" style="justify-content:flex-end"><button class="btn plain" id="p-c">Cerrar</button><button class="btn" id="p-m">Añadir a mano</button></div>', ov=>{ ov.querySelector('#p-c').onclick=closeModal; ov.querySelector('#p-m').onclick=()=>{ closeModal(); itemForm(); }; });
+    return;
+  }
+  const inp=document.getElementById('photoInput'); inp.value=''; inp.click();
+}
+document.getElementById('photoInput').addEventListener('change', async e=>{
+  const file=e.target.files && e.target.files[0]; if(!file) return;
+  let shot; try{ shot=await downscale(file); }catch(err){ toast('No he podido abrir esa imagen'); return; }
+  openModal('<h2>Mirando tu foto…</h2><img class="photo-preview" alt="Tu foto" src="'+shot.url+'"><p class="row"><span class="spinner" style="color:var(--accent)"></span> Reconociendo alimentos</p>');
+  const prompt='Eres el asistente de una app española contra el desperdicio de comida. Mira la foto (una nevera, despensa o compra) y enumera los alimentos que se ven con claridad. '+
+    'Devuelve SOLO JSON con esta forma: {"alimentos":[{"nombre":"Yogures naturales","cantidad":"4 uds","sitio":"nevera"|"despensa","dias_hasta_caducar":número entero estimado para un producto en buen estado,"precio_eur":precio orientativo en un supermercado español}]}. '+
+    'Nombres cortos en español, en plural si hay varios. No inventes productos que no se vean. Si no ves comida, devuelve {"alimentos":[]}. Hoy es '+todayStr()+'.';
+  try{
+    const res=await sample.json(prompt,{images:[shot.blob], modelTier:'default'});
+    const list=(res && Array.isArray(res.alimentos))?res.alimentos:[];
+    reviewDetected(list, shot.url);
+  }catch(err){
+    const msg = err && err.code==='rate_limited' ? 'Has hecho muchas peticiones seguidas. Espera un minuto y prueba otra vez.' : err && err.code==='not_granted' ? 'No se ha dado permiso para usar la IA.' : 'No he podido analizar la foto. Prueba con otra más cercana y con buena luz.';
+    openModal('<h2>Algo ha fallado</h2><p>'+msg+'</p><div class="row" style="justify-content:flex-end"><button class="btn" id="x">Vale</button></div>', ov=>ov.querySelector('#x').onclick=closeModal);
+    if(err && err.code==='not_granted'){ sample=null; render(); }
+  }
+});
+function reviewDetected(list, url){
+  if(!list.length){ openModal('<h2>No he visto alimentos</h2><img class="photo-preview" alt="Tu foto" src="'+url+'"><p>Prueba con una foto más cercana o con mejor luz, o añádelos a mano.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="x">Vale</button></div>', ov=>ov.querySelector('#x').onclick=closeModal); return; }
+  const rows=list.slice(0,40).map(a=>{
+    const r=refFor(a.nombre); const days=Number.isFinite(+a.dias_hasta_caducar)?Math.max(0,Math.round(+a.dias_hasta_caducar)):(r?r[1]:7);
+    return {name:String(a.nombre||'').slice(0,60), qty:String(a.cantidad||'').slice(0,30), place:a.sitio==='despensa'?'despensa':(a.sitio==='nevera'?'nevera':(r?r[3]:'nevera')), expiry:addDays(days), price:Number.isFinite(+a.precio_eur)?Math.round(+a.precio_eur*100)/100:(r?r[2]:1)};
+  }).filter(r=>r.name);
+  openModal('<h2>He encontrado '+rows.length+' alimentos</h2><p class="sub" style="margin:0">Revisa y desmarca lo que no sea correcto. Las fechas son estimadas: puedes cambiarlas después.</p>'+
+    '<div>'+rows.map((r,k)=>'<div class="check-row"><input type="checkbox" id="d-c'+k+'" checked><label class="grow" for="d-c'+k+'"><strong>'+esc(r.name)+'</strong><div class="small muted">'+esc(r.qty)+' · '+(r.place==='nevera'?'Nevera':'Despensa')+' · '+statusLabel(r)+' · '+eur(r.price)+'</div></label></div>').join('')+'</div>'+
+    '<div class="row" style="justify-content:flex-end"><button class="btn plain" id="d-cancel">Cancelar</button><button class="btn" id="d-ok">Añadir a mi cocina</button></div>', ov=>{
+      ov.querySelector('#d-cancel').onclick=closeModal;
+      ov.querySelector('#d-ok').onclick=()=>{
+        let n=0; rows.forEach((r,k)=>{ if(ov.querySelector('#d-c'+k).checked){ S.items.push(Object.assign({id:uid()},r)); n++; } });
+        closeModal(); save(); render(); toast(n+' alimentos añadidos');
+      };
+    });
+}
+
+/* ============ Recetas ============ */
+function urgencyWeight(it){ const d=daysLeft(it.expiry); if(d<0) return 6; return Math.max(1, 12-d); }
+function localRecipes(){
+  const inv=sortedItems().map(i=>({it:i,n:norm(i.name)}));
+  const out=[];
+  BOOK.forEach(r=>{
+    if(S.filters.quick && r.min>20) return;
+    if(S.filters.veg && !r.veg) return;
+    const used=[]; let ok=true;
+    for(const slot of r.slots){
+      const m=inv.find(x=>!used.includes(x.it) && slot.some(k=>x.n.includes(k)));
+      if(!m){ ok=false; break; }
+      used.push(m.it);
+    }
+    if(!ok) return;
+    const score=used.reduce((s,it)=>s+urgencyWeight(it),0);
+    const steps=r.steps.map(s=>s.replace(/\{(\d)\}/g,(_,k)=>used[k]?used[k].name.toLowerCase():''));
+    const urg=used.filter(it=>daysLeft(it.expiry)<=2);
+    out.push({id:uid(), title:r.t, minutes:r.min, servings:1, source:'local', score,
+      why: urg.length?'Aprovecha '+urg.map(i=>i.name.toLowerCase()).join(' y ')+', que '+(urg.length>1?'caducan':'caduca')+' pronto.':'Usa ingredientes que ya tienes.',
+      uses:used.map(it=>({itemId:it.id,name:it.name,amount:''})), extras:r.extras, steps});
+  });
+  return out.sort((a,b)=>b.score-a.score).slice(0,5);
+}
+function matchItem(name, taken){
+  const n=norm(name); if(!n) return null;
+  let best=S.items.find(i=>norm(i.name)===n);
+  if(!best) best=S.items.find(i=>norm(i.name).includes(n)||n.includes(norm(i.name)));
+  if(!best){ const words=n.split(/\s+/).filter(w=>w.length>3).map(w=>w.replace(/(es|s)$/,'')); best=S.items.find(i=>words.some(w=>norm(i.name).includes(w))); }
+  return best||null;
+}
+async function genRecipes(useAI){
+  recipeLoading=true; recipeError=''; render();
+  try{
+    let list;
+    if(useAI && sample){
+      const inv=sortedItems().map(i=>'- '+i.name+(i.qty?' ('+i.qty+')':'')+': '+statusLabel(i).toLowerCase()).join('\n');
+      const prompt='Eres un cocinero casero español que ayuda a no tirar comida. La persona vive sola (o con poco presupuesto) y tiene esto en su cocina, ordenado de lo que caduca antes a lo que menos:\n'+inv+
+        '\n\nPropón 3 recetas sencillas y realistas para 1-2 raciones. Reglas:\n1. Cada receta debe usar al menos uno de los alimentos que caducan antes (los primeros de la lista).\n2. Usa SOLO alimentos de la lista, más básicos que casi todo el mundo tiene: aceite, sal, pimienta, agua, azúcar, vinagre, especias secas. Nada más.\n3. No uses alimentos caducados hace más de 2 días.\n4. Pasos claros, cortos, con tiempos y temperaturas.'+
+        (S.filters.quick?'\n5. Todas en 20 minutos o menos.':'')+(S.filters.veg?'\n6. Todas vegetarianas (sin carne ni pescado).':'')+
+        '\n\nDevuelve SOLO JSON: {"recetas":[{"titulo":"…","minutos":número,"raciones":número,"por_que":"una frase: qué aprovecha que caduca pronto","usa":[{"nombre":"nombre EXACTO como aparece en la lista","cantidad":"ej. 2 uds"}],"basicos":["aceite","sal"],"pasos":["…"]}]}';
+      const res=await sample.json(prompt,{modelTier:'default'});
+      const raw=(res && Array.isArray(res.recetas))?res.recetas:[];
+      list=raw.map(r=>{
+        const uses=[]; (r.usa||[]).forEach(u=>{ const it=matchItem(u.nombre); if(it && !uses.some(x=>x.itemId===it.id)) uses.push({itemId:it.id,name:it.name,amount:String(u.cantidad||'').slice(0,30)}); });
+        return {id:uid(), title:String(r.titulo||'Receta').slice(0,80), minutes:Math.max(1,Math.round(+r.minutos||20)), servings:Math.max(1,Math.round(+r.raciones||1)), source:'ia',
+          why:String(r.por_que||'').slice(0,200), uses, extras:(r.basicos||[]).map(String).slice(0,8), steps:(r.pasos||[]).map(String).slice(0,15)};
+      }).filter(r=>r.uses.length && r.steps.length);
+      if(!list.length) throw {code:'empty'};
+    } else {
+      list=localRecipes();
+      if(!list.length) recipeError='Con lo que tienes no encuentro ninguna receta del recetario'+(S.filters.quick||S.filters.veg?' con esos filtros':'')+'. Añade más alimentos'+(sample?' o prueba con IA':'')+'.';
+    }
+    S.recipes=list; S.recipesFor=inventoryKey();
+    save();
+  }catch(err){
+    if(err && err.code==='not_granted'){ sample=null; recipeError='No se ha dado permiso para la IA. Te enseño recetas del recetario.'; S.recipes=localRecipes(); S.recipesFor=inventoryKey(); }
+    else if(err && err.code==='rate_limited'){ recipeError='Has pedido muchas recetas seguidas. Espera un minuto o usa «Sin IA».'; }
+    else { recipeError='La IA no ha podido darme recetas ahora. Te enseño las del recetario.'; S.recipes=localRecipes(); S.recipesFor=inventoryKey(); }
+  }
+  recipeLoading=false; render();
+}
+function openRecipe(idx){
+  const r=S.recipes[idx]; if(!r) return;
+  const usesHtml=r.uses.map(u=>{ const it=S.items.find(i=>i.id===u.itemId); return '<li>'+esc(u.name)+(u.amount?' — '+esc(u.amount):'')+(it?' <span class="pill '+(status(it)==='ok'?'':status(it))+'">'+statusLabel(it)+'</span>':' <span class="pill ex">ya no está</span>')+'</li>'; }).join('');
+  openModal('<div class="recipe-head"><div><h2>'+esc(r.title)+'</h2><div class="small muted">'+r.minutes+' min · '+r.servings+(r.servings>1?' raciones':' ración')+'</div></div><button class="btn small plain" id="r-x" aria-label="Cerrar">Cerrar</button></div>'+
+    (r.why?'<p class="why">'+esc(r.why)+'</p>':'')+
+    '<div><h3>Ingredientes de tu cocina</h3><ul style="margin:6px 0 0;padding-left:20px">'+usesHtml+'</ul>'+(r.extras&&r.extras.length?'<p class="small muted">Básicos: '+esc(r.extras.join(', '))+'</p>':'')+'</div>'+
+    '<div class="row">'+videoLink(r,false)+'<span class="small muted">Abre vídeos de esta receta en YouTube</span></div>'+
+    '<div><h3 style="margin-bottom:8px">Pasos</h3><ol class="steps">'+r.steps.map((s,k)=>'<li><label><input type="checkbox" data-step="'+k+'"><span><strong>'+(k+1)+'.</strong> '+esc(s)+'</span></label></li>').join('')+'</ol></div>'+
+    '<p class="small muted" style="margin:0">Revisa siempre que los alimentos estén en buen estado antes de cocinarlos.</p>'+
+    '<button class="btn" id="r-cook">La he cocinado</button>', ov=>{
+      ov.querySelector('#r-x').onclick=closeModal;
+      ov.querySelectorAll('[data-step]').forEach(c=>c.addEventListener('change',()=>c.closest('li').classList.toggle('done',c.checked)));
+      ov.querySelector('#r-cook').onclick=()=>{
+        const entries=r.uses.map(u=>({item:S.items.find(i=>i.id===u.itemId), amount:u.amount})).filter(e=>e.item);
+        if(!entries.length){ S.stats.cooked++; logEntry('saved', r.title, 0); closeModal(); save(); render(); toast('¡Buen provecho!'); return; }
+        usageDialog(r.title, entries, ()=>{ S.stats.cooked++; S.recipes=S.recipes.filter(x=>x.id!==r.id); });
+      };
+    });
+}
+
+/* ============ Eventos ============ */
+document.addEventListener('click', e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.dataset.tab){ S.tab=t.dataset.tab; render(); window.scrollTo(0,0); return; }
+  if(t.dataset.place){ S.place=t.dataset.place; render(); return; }
+  if(t.dataset.filter){ S.filters[t.dataset.filter]=!S.filters[t.dataset.filter]; save(); render(); return; }
+  const act=t.dataset.act, id=t.dataset.id;
+  const item=id?S.items.find(i=>i.id===id):null;
+  switch(act){
+    case 'go-recipes': S.tab='recetas'; render(); break;
+    case 'add-manual': itemForm(); break;
+    case 'add-photo': photoStart(); break;
+    case 'edit': if(item) itemForm(item); break;
+    case 'used': if(item) usageDialog(item.name, [{item}]); break;
+    case 'waste': if(item) wasteDialog(item); break;
+    case 'clear-example': S.items=S.items.filter(i=>!i.example); S.example=false; S.recipes=[]; save(); render(); break;
+    case 'gen': genRecipes(true); break;
+    case 'gen-local': genRecipes(false); break;
+    case 'open-recipe': openRecipe(+t.dataset.idx); break;
+    case 'reset-stats':
+      openModal('<h2>¿Poner los contadores a cero?</h2><p>Se borrará el ahorro, lo tirado y el historial. Tus alimentos no se tocan.</p><div class="row" style="justify-content:flex-end"><button class="btn plain" id="z-c">Cancelar</button><button class="btn danger" id="z-ok">Poner a cero</button></div>', ov=>{
+        ov.querySelector('#z-c').onclick=closeModal;
+        ov.querySelector('#z-ok').onclick=()=>{ S.stats={saved:0,wasted:0,itemsSaved:0,itemsWasted:0,cooked:0,log:[]}; closeModal(); save(); render(); };
+      }); break;
+  }
+});
+
+loadLocal();
+render();
+initCapabilities();
+</script>
+</body>
+</html>
