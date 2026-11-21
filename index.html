@@ -260,6 +260,27 @@ const S = {
 
 /* ============ Guardado ============ */
 let db=null, docRef=null, sample=null, sampleImages=false, saveTimer=null, saving=false, pendingSave=false;
+let gemini=false; // true cuando la app está en Vercel con la clave de Gemini configurada
+const aiReady = () => !!sample || gemini;
+const aiPhoto = () => (!!sample && sampleImages) || gemini;
+async function checkGemini(){
+  if(!/^https?:$/.test(location.protocol)) return;
+  try{
+    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),6000);
+    const r=await fetch('api/gemini',{signal:ctrl.signal}); clearTimeout(t);
+    if(!r.ok) return;
+    const d=await r.json();
+    if(d && d.configured){ gemini=true; render(); }
+  }catch(e){}
+}
+async function geminiCall(task, payload){
+  let r;
+  try{ r=await fetch('api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({task},payload))}); }
+  catch(e){ throw {code:'network'}; }
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw {code: d.error==='rate_limited'?'rate_limited':(d.error||'failed')};
+  return d;
+}
 const LS_KEY='chef-antidesperdicio-v1';
 function snapshot(){ return {items:S.items, stats:S.stats, recipes:S.recipes, recipesFor:S.recipesFor, example:S.example, filters:S.filters, v:1}; }
 function applyData(d){
@@ -287,6 +308,7 @@ async function flush(){
 function loadLocal(){ try{ const raw=localStorage.getItem(LS_KEY); if(raw) applyData(JSON.parse(raw)); }catch(e){} }
 
 async function initCapabilities(){
+  checkGemini();
   if(!window.claude || !window.claude.use){ return; }
   claude.use('sample').then(async s=>{
     sample=s;
@@ -388,8 +410,8 @@ function inventoryKey(){ return S.items.map(i=>i.id+':'+i.expiry+':'+(i.price||0
 function viewRecetas(){
   let h='<div class="card"><h2>¿Qué cocino hoy?</h2><p class="sub" style="margin:0">Las recetas usan primero lo que está a punto de caducar.</p>'+
     '<div class="chips"><button class="chip" data-filter="quick" aria-pressed="'+S.filters.quick+'">Rápidas (≤ 20 min)</button><button class="chip" data-filter="veg" aria-pressed="'+S.filters.veg+'">Vegetarianas</button></div>'+
-    '<div class="row"><button class="btn" data-act="gen" '+(recipeLoading||!S.items.length?'disabled':'')+' style="flex:1">'+(recipeLoading?'<span class="spinner"></span> Pensando recetas…':(sample?'Sugerir recetas con IA':'Sugerir recetas'))+'</button>'+
-    (sample?'<button class="btn ghost" data-act="gen-local" '+(recipeLoading||!S.items.length?'disabled':'')+'>Sin IA</button>':'')+'</div>'+
+    '<div class="row"><button class="btn" data-act="gen" '+(recipeLoading||!S.items.length?'disabled':'')+' style="flex:1">'+(recipeLoading?'<span class="spinner"></span> Pensando recetas…':(aiReady()?'Sugerir recetas con IA':'Sugerir recetas'))+'</button>'+
+    (aiReady()?'<button class="btn ghost" data-act="gen-local" '+(recipeLoading||!S.items.length?'disabled':'')+'>Sin IA</button>':'')+'</div>'+
     (recipeError?'<p class="err">'+esc(recipeError)+'</p>':'')+
     (!S.items.length?'<p class="small muted">Primero añade algún alimento en «Mi cocina».</p>':'')+'</div>';
   if(S.recipes.length){
@@ -519,8 +541,8 @@ async function downscale(file){
   return await new Promise(res=>c.toBlob(b=>res({blob:b, url:c.toDataURL('image/jpeg',0.7)}),'image/jpeg',0.82));
 }
 function photoStart(){
-  if(!sample || !sampleImages){
-    openModal('<h2>Añadir con foto</h2><p>Para reconocer los alimentos de una foto hace falta la IA, y en esta vista no está disponible. Abre la app desde claude.ai con tu cuenta para usarla.</p><p class="sub">Mientras tanto, puedes añadirlos a mano: te sugiero la fecha y el precio al escribir el nombre.</p><div class="row" style="justify-content:flex-end"><button class="btn plain" id="p-c">Cerrar</button><button class="btn" id="p-m">Añadir a mano</button></div>', ov=>{ ov.querySelector('#p-c').onclick=closeModal; ov.querySelector('#p-m').onclick=()=>{ closeModal(); itemForm(); }; });
+  if(!aiPhoto()){
+    openModal('<h2>Añadir con foto</h2><p>Para reconocer los alimentos de una foto hace falta la IA, y en esta versión no está disponible. Funciona en la versión publicada en Vercel con la clave de Gemini configurada, o abriendo la app desde claude.ai.</p><p class="sub">Mientras tanto, puedes añadirlos a mano: te sugiero la fecha y el precio al escribir el nombre.</p><div class="row" style="justify-content:flex-end"><button class="btn plain" id="p-c">Cerrar</button><button class="btn" id="p-m">Añadir a mano</button></div>', ov=>{ ov.querySelector('#p-c').onclick=closeModal; ov.querySelector('#p-m').onclick=()=>{ closeModal(); itemForm(); }; });
     return;
   }
   const inp=document.getElementById('photoInput'); inp.value=''; inp.click();
@@ -533,11 +555,17 @@ document.getElementById('photoInput').addEventListener('change', async e=>{
     'Devuelve SOLO JSON con esta forma: {"alimentos":[{"nombre":"Yogures naturales","cantidad":"4 uds","sitio":"nevera"|"despensa","dias_hasta_caducar":número entero estimado para un producto en buen estado,"precio_eur":precio orientativo en un supermercado español}]}. '+
     'Nombres cortos en español, en plural si hay varios. No inventes productos que no se vean. Si no ves comida, devuelve {"alimentos":[]}. Hoy es '+todayStr()+'.';
   try{
-    const res=await sample.json(prompt,{images:[shot.blob], modelTier:'default'});
+    const res = (sample && sampleImages)
+      ? await sample.json(prompt,{images:[shot.blob], modelTier:'default'})
+      : await geminiCall('photo',{image:shot.url.split(',')[1], today:todayStr()});
     const list=(res && Array.isArray(res.alimentos))?res.alimentos:[];
     reviewDetected(list, shot.url);
   }catch(err){
-    const msg = err && err.code==='rate_limited' ? 'Has hecho muchas peticiones seguidas. Espera un minuto y prueba otra vez.' : err && err.code==='not_granted' ? 'No se ha dado permiso para usar la IA.' : 'No he podido analizar la foto. Prueba con otra más cercana y con buena luz.';
+    const msg = err && err.code==='rate_limited' ? 'Se ha llegado al límite gratuito de la IA por ahora. Espera un minuto (o hasta mañana) y prueba otra vez.'
+      : err && err.code==='not_granted' ? 'No se ha dado permiso para usar la IA.'
+      : err && err.code==='bad_key' ? 'La clave de Gemini no es válida. Revisa la variable GEMINI_API_KEY en Vercel.'
+      : err && err.code==='not_configured' ? 'Falta configurar la clave de Gemini en Vercel.'
+      : 'No he podido analizar la foto. Prueba con otra más cercana y con buena luz.';
     openModal('<h2>Algo ha fallado</h2><p>'+msg+'</p><div class="row" style="justify-content:flex-end"><button class="btn" id="x">Vale</button></div>', ov=>ov.querySelector('#x').onclick=closeModal);
     if(err && err.code==='not_granted'){ sample=null; render(); }
   }
@@ -590,33 +618,41 @@ function matchItem(name, taken){
   if(!best){ const words=n.split(/\s+/).filter(w=>w.length>3).map(w=>w.replace(/(es|s)$/,'')); best=S.items.find(i=>words.some(w=>norm(i.name).includes(w))); }
   return best||null;
 }
+function mapAIRecipes(res){
+  const raw=(res && Array.isArray(res.recetas))?res.recetas:[];
+  return raw.map(r=>{
+    const uses=[]; (Array.isArray(r.usa)?r.usa:[]).forEach(u=>{ const it=matchItem(u&&u.nombre); if(it && !uses.some(x=>x.itemId===it.id)) uses.push({itemId:it.id,name:it.name,amount:String(u.cantidad||'').slice(0,30)}); });
+    return {id:uid(), title:String(r.titulo||'Receta').slice(0,80), minutes:Math.max(1,Math.round(+r.minutos||20)), servings:Math.max(1,Math.round(+r.raciones||1)), source:'ia',
+      why:String(r.por_que||'').slice(0,200), uses, extras:(Array.isArray(r.basicos)?r.basicos:[]).map(String).slice(0,8), steps:(Array.isArray(r.pasos)?r.pasos:[]).map(String).slice(0,15)};
+  }).filter(r=>r.uses.length && r.steps.length);
+}
 async function genRecipes(useAI){
   recipeLoading=true; recipeError=''; render();
   try{
     let list;
-    if(useAI && sample){
+    if(useAI && !sample && gemini){
+      const res=await geminiCall('recipes',{inventory:sortedItems().map(i=>({name:i.name,qty:i.qty||'',label:statusLabel(i).toLowerCase()})), quick:S.filters.quick, veg:S.filters.veg});
+      list=mapAIRecipes(res);
+      if(!list.length) throw {code:'empty'};
+    } else if(useAI && sample){
       const inv=sortedItems().map(i=>'- '+i.name+(i.qty?' ('+i.qty+')':'')+': '+statusLabel(i).toLowerCase()).join('\n');
       const prompt='Eres un cocinero casero español que ayuda a no tirar comida. La persona vive sola (o con poco presupuesto) y tiene esto en su cocina, ordenado de lo que caduca antes a lo que menos:\n'+inv+
         '\n\nPropón 3 recetas sencillas y realistas para 1-2 raciones. Reglas:\n1. Cada receta debe usar al menos uno de los alimentos que caducan antes (los primeros de la lista).\n2. Usa SOLO alimentos de la lista, más básicos que casi todo el mundo tiene: aceite, sal, pimienta, agua, azúcar, vinagre, especias secas. Nada más.\n3. No uses alimentos caducados hace más de 2 días.\n4. Pasos claros, cortos, con tiempos y temperaturas.'+
         (S.filters.quick?'\n5. Todas en 20 minutos o menos.':'')+(S.filters.veg?'\n6. Todas vegetarianas (sin carne ni pescado).':'')+
         '\n\nDevuelve SOLO JSON: {"recetas":[{"titulo":"…","minutos":número,"raciones":número,"por_que":"una frase: qué aprovecha que caduca pronto","usa":[{"nombre":"nombre EXACTO como aparece en la lista","cantidad":"ej. 2 uds"}],"basicos":["aceite","sal"],"pasos":["…"]}]}';
       const res=await sample.json(prompt,{modelTier:'default'});
-      const raw=(res && Array.isArray(res.recetas))?res.recetas:[];
-      list=raw.map(r=>{
-        const uses=[]; (r.usa||[]).forEach(u=>{ const it=matchItem(u.nombre); if(it && !uses.some(x=>x.itemId===it.id)) uses.push({itemId:it.id,name:it.name,amount:String(u.cantidad||'').slice(0,30)}); });
-        return {id:uid(), title:String(r.titulo||'Receta').slice(0,80), minutes:Math.max(1,Math.round(+r.minutos||20)), servings:Math.max(1,Math.round(+r.raciones||1)), source:'ia',
-          why:String(r.por_que||'').slice(0,200), uses, extras:(r.basicos||[]).map(String).slice(0,8), steps:(r.pasos||[]).map(String).slice(0,15)};
-      }).filter(r=>r.uses.length && r.steps.length);
+      list=mapAIRecipes(res);
       if(!list.length) throw {code:'empty'};
     } else {
       list=localRecipes();
-      if(!list.length) recipeError='Con lo que tienes no encuentro ninguna receta del recetario'+(S.filters.quick||S.filters.veg?' con esos filtros':'')+'. Añade más alimentos'+(sample?' o prueba con IA':'')+'.';
+      if(!list.length) recipeError='Con lo que tienes no encuentro ninguna receta del recetario'+(S.filters.quick||S.filters.veg?' con esos filtros':'')+'. Añade más alimentos'+(aiReady()?' o prueba con IA':'')+'.';
     }
     S.recipes=list; S.recipesFor=inventoryKey();
     save();
   }catch(err){
     if(err && err.code==='not_granted'){ sample=null; recipeError='No se ha dado permiso para la IA. Te enseño recetas del recetario.'; S.recipes=localRecipes(); S.recipesFor=inventoryKey(); }
-    else if(err && err.code==='rate_limited'){ recipeError='Has pedido muchas recetas seguidas. Espera un minuto o usa «Sin IA».'; }
+    else if(err && err.code==='rate_limited'){ recipeError='Se ha llegado al límite gratuito de la IA por ahora. Espera un minuto o usa «Sin IA».'; }
+    else if(err && (err.code==='bad_key'||err.code==='not_configured')){ recipeError=err.code==='bad_key'?'La clave de Gemini no es válida (revisa GEMINI_API_KEY en Vercel). Te enseño las del recetario.':'Falta la clave de Gemini en Vercel. Te enseño las del recetario.'; S.recipes=localRecipes(); S.recipesFor=inventoryKey(); }
     else { recipeError='La IA no ha podido darme recetas ahora. Te enseño las del recetario.'; S.recipes=localRecipes(); S.recipesFor=inventoryKey(); }
   }
   recipeLoading=false; render();
