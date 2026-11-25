@@ -10,14 +10,14 @@
 <style>
 /* Layout: una sola columna tipo app móvil, cabecera con avisos, pestañas abajo (Nevera · Recetas · Ahorro) */
 :root{
-  --bg:#fbf4f7;
+  --bg:#f6f3fb;
   --surface:#ffffff;
-  --ink:#3a1428;
-  --muted:#7a5a6a;
-  --line:#eedbe4;
-  --accent:#c2185b;
+  --ink:#261a3d;
+  --muted:#685c7e;
+  --line:#e2dcef;
+  --accent:#6b3fc6;
   --accent-ink:#ffffff;
-  --accent-soft:#fbe3ee;
+  --accent-soft:#ece4fb;
   --warn:#b86e00;
   --warn-soft:#fdf0d9;
   --bad:#c0392b;
@@ -28,15 +28,15 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#1a0f15; --surface:#24161e; --ink:#f6e6ee; --muted:#b898a8; --line:#3d2a34;
-    --accent:#ff8cc0; --accent-ink:#3a0a20; --accent-soft:#3a1a2a;
+    --bg:#130f1d; --surface:#1d1729; --ink:#ece6f8; --muted:#a79cbd; --line:#342b47;
+    --accent:#b79cff; --accent-ink:#1c0a3d; --accent-soft:#2c2045;
     --warn:#f0b04a; --warn-soft:#3a2c12; --bad:#f07264; --bad-soft:#3d1d19;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#1a0f15; --surface:#24161e; --ink:#f6e6ee; --muted:#b898a8; --line:#3d2a34;
-  --accent:#ff8cc0; --accent-ink:#3a0a20; --accent-soft:#3a1a2a;
+  --bg:#130f1d; --surface:#1d1729; --ink:#ece6f8; --muted:#a79cbd; --line:#342b47;
+  --accent:#b79cff; --accent-ink:#1c0a3d; --accent-soft:#2c2045;
   --warn:#f0b04a; --warn-soft:#3a2c12; --bad:#f07264; --bad-soft:#3d1d19;
   color-scheme:dark;
 }
@@ -118,7 +118,7 @@ nav.tabs button svg{width:24px;height:24px}
 nav.tabs button[aria-current="page"]{color:var(--accent)}
 .badge{background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;margin-left:2px}
 /* diálogos */
-.overlay{position:fixed;inset:0;background:rgba(30,8,20,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.overlay{position:fixed;inset:0;background:rgba(18,10,32,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .sheet{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:20px 16px 24px;display:flex;flex-direction:column;gap:14px}
 @media (min-width:600px){.overlay{align-items:center}.sheet{border-radius:18px}}
 .field{display:flex;flex-direction:column;gap:4px}
